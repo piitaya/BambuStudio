@@ -6,10 +6,11 @@
 
 set -e
 
-find . -name CMakeLists.txt -print0 | xargs -0 sed -i.bak -E \
+# Patch both CMakeLists.txt and any *.cmake module file.
+find . \( -name CMakeLists.txt -o -name '*.cmake' \) -print0 | xargs -0 sed -i.bak -E \
     's/cmake_minimum_required[[:space:]]*\([^)]*\)/cmake_minimum_required(VERSION 3.5)/g'
 
 # Clean up .bak files sed leaves behind.
-find . -name 'CMakeLists.txt.bak' -delete
+find . \( -name 'CMakeLists.txt.bak' -o -name '*.cmake.bak' \) -delete
 
 exit 0
