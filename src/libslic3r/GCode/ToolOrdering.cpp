@@ -1816,7 +1816,10 @@ MultiNozzleUtils::LayeredNozzleGroupResult ToolOrdering::get_recommended_filamen
             }
             else{
                 FilamentGroupMultiNozzle fg(context);
-                ret = fg.calc_filament_group_by_pam();
+                if (fg.is_asymmetric_printer())
+                    ret = fg.calc_filament_group_for_asymmetric();
+                else
+                    ret = fg.calc_filament_group_by_pam();
             }
 
             auto result_opt = LayeredNozzleGroupResult::create(ret, context.nozzle_info.nozzle_list, used_filaments);

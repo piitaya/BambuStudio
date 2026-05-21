@@ -184,6 +184,13 @@ namespace Slic3r
         std::vector<int> calc_filament_group_by_mcmf();
         std::vector<int> calc_filament_group_by_pam();
 
+        // Asymmetric printers (e.g. H2C: one extruder with max_group_size=1, the other > 1)
+        // collapse the grouping problem to a single decision: which filament goes solo on
+        // the size-1 side. Exhaustively try every candidate (and the no-solo option) and
+        // pick the lowest-cost assignment by the same flush metric PAM uses.
+        bool is_asymmetric_printer() const;
+        std::vector<int> calc_filament_group_for_asymmetric();
+
     private:
         std::unordered_map<int, std::vector<int>> rebuild_nozzle_unprintables(const std::vector<unsigned int>& used_filaments, const std::unordered_map<int, std::vector<int>>& extruder_unprintables, const std::vector<int>& filament_volume_map);
     private:

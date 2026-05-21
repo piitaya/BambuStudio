@@ -1472,6 +1472,91 @@ namespace Slic3r
         return nozzle_unprintables;
     }
 
+    bool FilamentGroupMultiNozzle::is_asymmetric_printer() const
+    {
+        int num_size_one = 0;
+        int num_size_many = 0;
+        for (int s : m_context.machine_info.max_group_size) {
+            if (s == 1) ++num_size_one;
+            else if (s > 1) ++num_size_many;
+        }
+        return num_size_one == 1 && num_size_many == 1;
+    }
+
+    std::vector<int> FilamentGroupMultiNozzle::calc_filament_group_for_asymmetric()
+    {
+        int small_side = -1;
+        int large_side = -1;
+        for (size_t i = 0; i < m_context.machine_info.max_group_size.size(); ++i) {
+            if (m_context.machine_info.max_group_size[i] == 1) small_side = (int)i;
+            else if (m_context.machine_info.max_group_size[i] > 1) large_side = (int)i;
+        }
+        if (small_side < 0 || large_side < 0)
+            return {};
+
+        auto used_filaments = collect_sorted_used_filaments(m_context.model_info.layer_filaments);
+        const int n = (int)used_filaments.size();
+        const int total_filament_num = m_context.group_info.total_filament_num;
+
+        std::unordered_map<int, std::vector<int>> unplaceable;
+        extract_unprintable_limit_indices(m_context.model_info.unprintable_filaments, used_filaments, unplaceable);
+        unplaceable = rebuild_nozzle_unprintables(used_filaments, unplaceable, m_context.group_info.filament_volume_map);
+
+        auto is_forbidden = [&](int filament_idx, int side) {
+            auto it = unplaceable.find(filament_idx);
+            if (it == unplaceable.end()) return false;
+            return std::find(it->second.begin(), it->second.end(), side) != it->second.end();
+        };
+
+        int best_solo = -2;
+        int best_cost = std::numeric_limits<int>::max();
+
+        // candidate == -1 means "no filament solo on small side" (everything on large side).
+        for (int candidate = -1; candidate < n; ++candidate) {
+            std::vector<int> filament_map(total_filament_num, large_side);
+            bool valid = true;
+            for (int i = 0; i < n; ++i) {
+                int side = (i == candidate) ? small_side : large_side;
+                if (is_forbidden(i, side)) { valid = false; break; }
+                filament_map[used_filaments[i]] = side;
+            }
+            if (!valid) continue;
+
+            int cost = reorder_filaments_for_minimum_flush_volume(
+                used_filaments,
+                filament_map,
+                m_context.model_info.layer_filaments,
+                m_context.model_info.flush_matrix,
+                std::nullopt,
+                nullptr,
+                m_context.nozzle_info.nozzle_status
+            );
+
+            BOOST_LOG_TRIVIAL(info) << "asym_group: solo=" << candidate
+                                    << " (filament_idx=" << (candidate >= 0 ? (int)used_filaments[candidate] : -1)
+                                    << ") cost=" << cost;
+
+            if (cost < best_cost) {
+                best_cost = cost;
+                best_solo = candidate;
+            }
+        }
+
+        if (best_solo == -2) {
+            BOOST_LOG_TRIVIAL(warning) << "asym_group: no valid assignment found, falling back to PAM";
+            return calc_filament_group_by_pam();
+        }
+
+        std::vector<int> result(total_filament_num, large_side);
+        if (best_solo >= 0)
+            result[used_filaments[best_solo]] = small_side;
+
+        BOOST_LOG_TRIVIAL(info) << "asym_group: picked solo filament idx="
+                                << (best_solo >= 0 ? (int)used_filaments[best_solo] : -1)
+                                << " on side " << small_side << " (cost=" << best_cost << ")";
+        return result;
+    }
+
     std::vector<int> FilamentGroupMultiNozzle::calc_filament_group_by_mcmf()
     {
         std::vector<unsigned int> used_filaments = collect_sorted_used_filaments(m_context.model_info.layer_filaments);
