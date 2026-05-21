@@ -284,6 +284,11 @@ if (NOT MSVC AND ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMP
 
     if((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang") AND ${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER 15)
         add_compile_options(-Wno-error=enum-constexpr-conversion)
+        # Clang 21+ no longer recognizes the enum-constexpr-conversion warning name.
+        # Combined with sub-projects that pass -Werror (e.g. clipper2), the unknown
+        # flag itself becomes a fatal error. Tolerate unknown warning options so the
+        # build doesn't break on newer toolchains.
+        add_compile_options(-Wno-unknown-warning-option)
     endif()
 
     #GCC generates loads of -Wunknown-pragmas when compiling igl. The fix is not easy due to a bug in gcc, see
